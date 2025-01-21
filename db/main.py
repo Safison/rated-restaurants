@@ -6,6 +6,7 @@ app = FastAPI()
 from pprint import pprint
 from pydantic import BaseModel
 
+
 @app.get('/healthcheck')
 def get_healthcheck():
     
@@ -46,6 +47,30 @@ def add_restaurant(new_restaurant:NewRestaurants):
     }
     return {'restaurant':formatted_restaurant}
 
+@app.post('/api/restaurant/{restaurant_id}',status_code=204)
+def delete_restaurant(restaurant_id):
+    conn = connect_to_db()
+    query_string = """DELETE FROM restaurants 
+    where restaurant_id=:restaurant_id;"""
+    deleted_restaurant = conn.run(query_string, restaurant_id=restaurant_id)
+    
+class UpdateRestaurant(BaseModel):
+    area_id : int
+   
 
-
-    pass
+@app.patch('/api/restaurants/{restaurant_id}')
+def update_restaurant(restaurant_id,update_restaurant:UpdateRestaurant):
+    conn = connect_to_db()
+    query_string = """UPDATE restaurants SET area_id=:area_id 
+    where restaurant_id=:restaurant_id RETURNING *;"""
+    update_dict = {}
+    update_dict['restaurant_id'] = restaurant_id
+    update_dict['area_id']=update_restaurant.area_id
+    
+    update_restaurant = conn.run(query_string, **update_dict)[0]
+    restaurant_col = [col['name'] for col in conn.columns]
+    formatted_restaurant = {
+        restaurant_col[i]:update_restaurant[i]
+        for i in range(len(restaurant_col))
+    }
+    return {'restaurant': formatted_restaurant}
