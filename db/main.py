@@ -1,6 +1,5 @@
 from fastapi import FastAPI,Response,status
 from db.connection import connect_to_db, close_db_connection
-import json
 from db.utils import format_restaurants
 app = FastAPI()
 from pprint import pprint
@@ -15,10 +14,19 @@ def get_healthcheck():
 @app.get('/api/restaurants')
 def get_restaurants():
     conn = connect_to_db()
-    raw_restaurants = conn.run('SELECT * FROM restaurants;')
-    pprint(raw_restaurants)
+    raw_restaurants = conn.run("""select restaurants.restaurant_id, restaurant_name, area_id,cuisine, 
+                               website,avg(rating) AS average_rating 
+                               from restaurants 
+                               join ratings 
+                               on restaurants.restaurant_id = ratings.restaurant_id
+                               GROUP BY restaurants.restaurant_id;
+                               ;""")
+   
+
+    pprint(raw_restaurants)    
     columns = [col['name'] for col in conn.columns]
     formated_restaurants = format_restaurants(raw_restaurants, columns)
+   
     close_db_connection(conn)
     return {'restaurants':formated_restaurants}
 
@@ -35,17 +43,9 @@ def add_restaurant(new_restaurant:NewRestaurants):
     query_string = ("""INSERT INTO restaurants (restaurant_name, area_id,cuisine,website) 
              VALUES (:restaurant_name, :area_id,:cuisine,:website) 
              RETURNING *;""")
-    # restaurant_dict['restaurant_name'] = new_restaurant.restaurant_name
-    # restaurant_dict['area_id'] = new_restaurant.area_id
-    # restaurant_dict['cuisine'] = new_restaurant.cuisine
-    # restaurant_dict['website'] = new_restaurant.website
     inserted_restaurant = conn.run(query_string,**new_restaurant.model_dump())[0]
     restaurant_coulmns= [col['name'] for col in conn.columns]
     close_db_connection(conn)
-    # formatted_restaurant = {
-    #     restaurant_coulmns[i]: inserted_restaurant[i]
-    #     for i in range(len(restaurant_coulmns)) 
-    # }
     formatted_restaurant = dict(zip(restaurant_coulmns, inserted_restaurant))
     return {'restaurant':formatted_restaurant}
 
@@ -102,4 +102,4 @@ def get_area_with_restaurants(area_id):
     formatted_area['total_restaurants'] = len(area_restaurants)
     formatted_area['restaurants'] = formatted_restaurant
     return formatted_area
-    pass
+
