@@ -44,7 +44,7 @@ def add_restaurant(new_restaurant:NewRestaurants):
         restaurant_coulmns[i]: inserted_restaurant[i]
         for i in range(len(restaurant_coulmns)) 
     }
-    return formatted_restaurant
+    return {'restaurant':formatted_restaurant}
 
 
 
