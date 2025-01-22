@@ -1,4 +1,4 @@
-from fastapi import FastAPI,Response,status,HTTPException
+from fastapi import FastAPI,Response,status,HTTPException,Query 
 from db.connection import connect_to_db, close_db_connection
 from db.utils import format_restaurants
 from pprint import pprint
@@ -76,14 +76,6 @@ def update_restaurant(restaurant_id,update_restaurant:UpdateRestaurant,response:
     conn = None
     try:
         conn = connect_to_db()
-        # restaurants_ids = conn.run("SELECT restaurant_id FROM restaurants;")
-        # print(restaurants_ids)
-        # id_check_result = any(restaurant_id in sublist for sublist in restaurant_id)
-        # print(id_check_result)
-        # print(restaurant_id)
-        # if not id_check_result:
-        #     response.status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-        # else:
         query_string = """UPDATE restaurants SET area_id=:area_id, website=:website 
         where restaurant_id=:restaurant_id RETURNING *;"""
         update_dict = {}
@@ -123,37 +115,28 @@ def get_area_with_restaurants(area_id):
     formatted_area['restaurants'] = formatted_restaurant
     return formatted_area
 
-# @app.get ('/api/restaurants/search')
-# def search_restaurant(search:str):
-#     conn = connect_to_db()
-#     #cursor = conn.cursor()
-#     search_query = """SELECT * FROM restaurants WHERE restaurant_name LIKE ?"""
-#     search_term = f"%{search}%"
-#     #search_query += search_term
-#     filtered_restaurants = conn.run(search_query, (search_term,))
-#     print(filtered_restaurants)
+@app.get("/api/getrestaurants/")
+def search_restaurants(search: str):
+    conn = connect_to_db()
+    query_string = """SELECT * FROM restaurants WHERE lower(restaurant_name) LIKE lower(:search)"""
+    search_str = f"%{search}%"
+    filtered_rest = conn.run(query_string,search = search_str)
+    rest_col = [col['name'] for col in conn.columns]
+    formated_rest = dict(zip(rest_col,filtered_rest))
+    return {'restaurants':formated_rest}
 
-# class UpdateRestaurantMultiple(BaseModel):
-#     website: str
-#     area_id : int
-
-# @app.patch('/api/restaurants/updatemultiple/{restaurant_id}')
-# def update_restaurant(restaurant_id,update_restaurant:UpdateRestaurantMultiple,response:Response):     
-#     conn = connect_to_db()
-#     update_query = """UPDATE restaurants SET area_id=:area_id, website=:website  
-#                     where restaurant_id=:restaurant_id RETURNING *;"""
-#     update_dict = {}
-#     update_dict['restaurant_id'] = restaurant_id
-#     update_dict['area_id']=update_restaurant.area_id
-#     update_dict['website'] = update_restaurant.website
-        
-#     update_restaurant = conn.run(update_query, **update_dict)[0]
-
-#     restaurant_col = [col['name'] for col in conn.columns]
-#     formatted_restaurant = {
-#     restaurant_col[i]:update_restaurant[i]
-#     for i in range(len(restaurant_col))
-#     }
-#     return {'restaurant': formatted_restaurant}
-
-
+@app.get ('/api/sortrestaurants')
+def sort(sort_by:str):
+    conn = None
+    try:
+        conn = connect_to_db()
+        query_string = """SELECT * FROM restaurants 
+                        ORDER BY :sort_by DESC"""
+        sort_str = f"{sort_by}"
+        sorted_rest = conn.run(query_string,sort_by = sort_str)
+        rest_col = [col['name'] for col in conn.columns]
+        format_rest = dict(zip(rest_col, sorted_rest))
+        return{'restaurants': format_rest}
+    finally:
+        if conn:
+            close_db_connection(conn)
