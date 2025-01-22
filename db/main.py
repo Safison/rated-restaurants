@@ -1,9 +1,18 @@
-from fastapi import FastAPI,Response,status
+from fastapi import FastAPI,Response,status,HTTPException
 from db.connection import connect_to_db, close_db_connection
 from db.utils import format_restaurants
-app = FastAPI()
 from pprint import pprint
 from pydantic import BaseModel
+from pg8000.exceptions import DatabaseError
+
+app = FastAPI()
+
+@app.exception_handler(DatabaseError)
+def handle_db_errors(request, exc):
+    print(exc)
+    err_detail='Whoops! something went wrong on our end'
+    raise HTTPException(status_code=500,detail=err_detail)
+
 
 
 @app.get('/healthcheck')
@@ -58,33 +67,44 @@ def delete_restaurant(restaurant_id):
     close_db_connection(conn)
     
 class UpdateRestaurant(BaseModel):
+    website:str
     area_id : int
    
 
 @app.patch('/api/restaurants/update/{restaurant_id}')
 def update_restaurant(restaurant_id,update_restaurant:UpdateRestaurant,response:Response):
-    conn = connect_to_db()
-    restaurants_ids = conn.run("SELECT restaurant_id FROM restaurants;")
-    print(restaurants_ids)
-    id_check_result = any(restaurant_id in sublist for sublist in restaurant_id)
-    print(id_check_result)
-    print(restaurant_id)
-    if not id_check_result:
-        response.status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-    else:
-        query_string = """UPDATE restaurants SET area_id=:area_id 
+    conn = None
+    try:
+        conn = connect_to_db()
+        # restaurants_ids = conn.run("SELECT restaurant_id FROM restaurants;")
+        # print(restaurants_ids)
+        # id_check_result = any(restaurant_id in sublist for sublist in restaurant_id)
+        # print(id_check_result)
+        # print(restaurant_id)
+        # if not id_check_result:
+        #     response.status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        # else:
+        query_string = """UPDATE restaurants SET area_id=:area_id, website=:website 
         where restaurant_id=:restaurant_id RETURNING *;"""
         update_dict = {}
         update_dict['restaurant_id'] = restaurant_id
         update_dict['area_id']=update_restaurant.area_id
-        
+        update_dict['website']=update_restaurant.website
+            
         update_restaurant = conn.run(query_string, **update_dict)[0]
         restaurant_col = [col['name'] for col in conn.columns]
         formatted_restaurant = {
-            restaurant_col[i]:update_restaurant[i]
-            for i in range(len(restaurant_col))
+        restaurant_col[i]:update_restaurant[i]
+        for i in range(len(restaurant_col))
         }
         return {'restaurant': formatted_restaurant}
+    except IndexError:
+        raise HTTPException(
+        status_code = 404,
+        detail = f'Restaurant with ID {restaurant_id} not found')
+    finally:
+        if conn:
+            close_db_connection(conn)
     
 @app.get('/api/areas/{area_id}/restaurants')
 def get_area_with_restaurants(area_id):
@@ -102,4 +122,38 @@ def get_area_with_restaurants(area_id):
     formatted_area['total_restaurants'] = len(area_restaurants)
     formatted_area['restaurants'] = formatted_restaurant
     return formatted_area
+
+# @app.get ('/api/restaurants/search')
+# def search_restaurant(search:str):
+#     conn = connect_to_db()
+#     #cursor = conn.cursor()
+#     search_query = """SELECT * FROM restaurants WHERE restaurant_name LIKE ?"""
+#     search_term = f"%{search}%"
+#     #search_query += search_term
+#     filtered_restaurants = conn.run(search_query, (search_term,))
+#     print(filtered_restaurants)
+
+# class UpdateRestaurantMultiple(BaseModel):
+#     website: str
+#     area_id : int
+
+# @app.patch('/api/restaurants/updatemultiple/{restaurant_id}')
+# def update_restaurant(restaurant_id,update_restaurant:UpdateRestaurantMultiple,response:Response):     
+#     conn = connect_to_db()
+#     update_query = """UPDATE restaurants SET area_id=:area_id, website=:website  
+#                     where restaurant_id=:restaurant_id RETURNING *;"""
+#     update_dict = {}
+#     update_dict['restaurant_id'] = restaurant_id
+#     update_dict['area_id']=update_restaurant.area_id
+#     update_dict['website'] = update_restaurant.website
+        
+#     update_restaurant = conn.run(update_query, **update_dict)[0]
+
+#     restaurant_col = [col['name'] for col in conn.columns]
+#     formatted_restaurant = {
+#     restaurant_col[i]:update_restaurant[i]
+#     for i in range(len(restaurant_col))
+#     }
+#     return {'restaurant': formatted_restaurant}
+
 
